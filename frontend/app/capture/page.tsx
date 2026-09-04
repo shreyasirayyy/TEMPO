@@ -7,7 +7,7 @@ import { AppShell } from '@/components/app-shell'
 import { Mascot } from '@/components/mascot'
 import { useTempo } from '@/lib/store'
 import { makeId } from '@/lib/id'
-import { detectDate, parseCapture } from '@/lib/ai/captureParser'
+import { detectDate, parseCapture, splitCaptureSegments } from '@/lib/ai/captureParser'
 import { tryAiExtract } from '@/lib/ai/aiExtract'
 import { tryAiExtractFromImage } from '@/lib/ai/imageExtract'
 import { findDuplicateApplication } from '@/lib/duplicates'
@@ -37,6 +37,10 @@ export default function CapturePage() {
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [voiceError, setVoiceError] = useState('')
+  // Queue of remaining segments when a single paste contained multiple
+  // tasks -- startProcessing() handles one at a time, and confirm()/skip()
+  // advance to the next segment instead of clearing back to the drop zone.
+  const [queue, setQueue] = useState<string[]>([])
 
   function startProcessing(type: CaptureType, rawText: string, proof?: string) {
     const item: CaptureItem = { id: makeId('cap'), type, rawText, createdAt: Date.now(), status: 'processing', proof }
@@ -112,6 +116,19 @@ export default function CapturePage() {
     setTextValue('')
     setRecording(false)
     setAudioUrl(null)
+    setQueue([])
+  }
+
+  // Pulls the next queued segment (if any) straight into processing instead
+  // of dropping back to the "what are you capturing" screen -- keeps a
+  // multi-task paste moving through review item-by-item.
+  function advanceQueue() {
+    setQueue((current) => {
+      const [next, ...rest] = current
+      if (next) startProcessing('text', next)
+      else reset()
+      return rest
+    })
   }
 
   function confirm() {
@@ -122,7 +139,13 @@ export default function CapturePage() {
     } else {
       setSavedMessage(`Added to your plan — "${draft.title}" will show up in What Matters Now.`)
     }
-    reset()
+    if (queue.length > 0) advanceQueue()
+    else reset()
+  }
+
+  function skipQueued() {
+    if (queue.length > 0) advanceQueue()
+    else reset()
   }
 
   return (
@@ -191,7 +214,12 @@ export default function CapturePage() {
                     />
                     <button
                       disabled={!textValue.trim()}
-                      onClick={() => startProcessing('text', textValue)}
+                      onClick={() => {
+                        const segments = splitCaptureSegments(textValue)
+                        const [first, ...rest] = segments
+                        setQueue(rest)
+                        startProcessing('text', first)
+                      }}
                       className="mt-3 w-full rounded-xl bg-tempo-sage px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
                     >
                       Process with Tempo
@@ -216,7 +244,15 @@ export default function CapturePage() {
             )}
 
             {capture && draft && capture.status !== 'processing' && (
-              <ReviewPanel draft={draft} setDraft={setDraft} onConfirm={confirm} onCancel={reset} applications={state.applications} />
+              <>
+                {queue.length > 0 && (
+                  <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-[#cbe1d8] bg-tempo-sageSoft px-3 py-2 text-xs text-tempo-ink">
+                    <span>{queue.length} more item{queue.length > 1 ? 's' : ''} detected in this paste — reviewing one at a time.</span>
+                    <button onClick={skipQueued} className="shrink-0 font-semibold text-tempo-sage underline-offset-2 hover:underline">Skip this one</button>
+                  </div>
+                )}
+                <ReviewPanel draft={draft} setDraft={setDraft} onConfirm={confirm} onCancel={queue.length > 0 ? skipQueued : reset} applications={state.applications} />
+              </>
             )}
           </section>
 

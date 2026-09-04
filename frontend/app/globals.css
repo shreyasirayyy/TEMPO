@@ -1,6 +1,8 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 
 :root {
   --tempo-bg: #f8f4ed;
@@ -18,7 +20,7 @@
 
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
-html { overflow-x: hidden; }
+html { overflow-x: hidden; scrollbar-gutter: stable; }
 body {
   margin: 0;
   overflow-x: hidden;

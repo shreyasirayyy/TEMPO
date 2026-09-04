@@ -61,6 +61,20 @@ function taskCategory(text: string): PriorityItem['category'] {
   return 'Academic'
 }
 
+export function splitCaptureSegments(rawText: string): string[] {
+  const text = rawText.trim()
+  if (!text) return []
+
+  const lines = text
+    .split(/\r?\n+/)
+    .flatMap((line) => line.split(/(?<=[.!?])\s+(?=[A-Z])/))
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
+    .filter((line) => line.length >= 6)
+    .filter((line) => /[a-zA-Z]{3,}/.test(line))
+
+  return lines.length > 1 ? lines : [text]
+}
+
 export function parseCapture(type: CaptureType, rawText: string): Extracted {
   const text = rawText.trim()
   const lower = text.toLowerCase()
