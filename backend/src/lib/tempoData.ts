@@ -107,7 +107,9 @@ function rowsForState(userId: string, state: any) {
   const exams = state.exams.map((exam: any) => ({ id: exam.id, user_id: userId, course_id: exam.courseId ?? null, title: exam.title, starts_at: exam.startsAt ? new Date(exam.startsAt).toISOString() : null }))
   const preferences = [{ id: `pref_${userId}`, user_id: userId, planning_mode: state.planningMode, theme: state.theme, planning_window_start: state.planningWindow.start, planning_window_end: state.planningWindow.end }]
   const focusSessions = state.focusSessions.map((session: any) => ({ id: session.id, user_id: userId, source_type: session.sourceType ?? null, source_id: session.sourceId ?? null, title: session.title ?? null, ended_at: session.completedAt, minutes: session.minutes, status: 'completed' }))
-  return { tables: { application_timeline_events: timeline, career_skills: skills, plan_blocks: plan, tasks, captured_items: captures, applications, career_goals: goals, learning_goals: learning, courses, subjects, attendance, assignments, exams, focus_sessions: focusSessions, user_preferences: preferences } }
+  
+ 
+  return { tables: { tasks, applications, career_goals: goals, learning_goals: learning, courses, subjects, focus_sessions: focusSessions, user_preferences: preferences, captured_items: captures, application_timeline_events: timeline, career_skills: skills, plan_blocks: plan, attendance, assignments, exams } }
 }
 
 export async function saveTempoData(client: SupabaseClient, userId: string, state: any, previous: any): Promise<void> {
