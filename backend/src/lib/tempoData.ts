@@ -93,7 +93,13 @@ function rowsForState(userId: string, state: any) {
   // it as task_id trips the plan_blocks_task_id_fkey constraint. source_type
   // / source_id below already carry that link for the frontend's own
   // matching logic, so task_id just stays null until a real tasks table exists.
-  const plan = state.plan.map((block: any) => ({ id: block.id, user_id: userId, task_id: null, title: block.title, day: block.day, start_time: block.time, duration_minutes: block.durationMinutes ?? 0, kind: block.kind, priority: block.priority, done: block.done, fixed: block.fixed, flexibility: block.flexibility, can_move: block.canMove, source_type: block.sourceType ?? null, source_id: block.sourceId ?? null, notes: block.notes ?? null }))
+  //
+  // FIX: duration_minutes must satisfy the DB check constraint
+  // (plan_blocks_duration_minutes_check -> duration_minutes > 0). Blocks
+  // created without an explicit duration (e.g. a captured "class tomorrow
+  // at 10am" with no end time) used to fall back to 0, which the database
+  // rejected on write. Fall back to a sane 30-minute default instead.
+  const plan = state.plan.map((block: any) => ({ id: block.id, user_id: userId, task_id: null, title: block.title, day: block.day, start_time: block.time, duration_minutes: block.durationMinutes && block.durationMinutes > 0 ? block.durationMinutes : 30, kind: block.kind, priority: block.priority, done: block.done, fixed: block.fixed, flexibility: block.flexibility, can_move: block.canMove, source_type: block.sourceType ?? null, source_id: block.sourceId ?? null, notes: block.notes ?? null }))
   const captures = state.captures.map((capture: any) => ({ id: capture.id, user_id: userId, capture_type: capture.type, raw_text: capture.rawText, proof: capture.proof ?? null, status: capture.status, extracted: capture.extracted ?? null }))
   const applications = state.applications.map((app: any) => ({ id: app.id, user_id: userId, company: app.company, role: app.role, status: app.status, deadline: app.deadline, deadline_at: app.deadlineAt ? new Date(app.deadlineAt).toISOString() : null, applied_on: app.appliedOn ?? null, link: app.link ?? null, questions: app.questions, submitted_items: app.submittedItems, proof: app.proof ?? null, notes: app.notes ?? null, follow_up_date: app.followUpDate ?? null }))
   const timeline = state.applications.flatMap((app: any) => app.timeline.map((event: any) => ({ id: event.id, user_id: userId, application_id: app.id, label: event.label, event_date: event.date, note: event.note ?? null })))
@@ -107,8 +113,8 @@ function rowsForState(userId: string, state: any) {
   const exams = state.exams.map((exam: any) => ({ id: exam.id, user_id: userId, course_id: exam.courseId ?? null, title: exam.title, starts_at: exam.startsAt ? new Date(exam.startsAt).toISOString() : null }))
   const preferences = [{ id: `pref_${userId}`, user_id: userId, planning_mode: state.planningMode, theme: state.theme, planning_window_start: state.planningWindow.start, planning_window_end: state.planningWindow.end }]
   const focusSessions = state.focusSessions.map((session: any) => ({ id: session.id, user_id: userId, source_type: session.sourceType ?? null, source_id: session.sourceId ?? null, title: session.title ?? null, ended_at: session.completedAt, minutes: session.minutes, status: 'completed' }))
-  
- 
+
+
   return { tables: { tasks, applications, career_goals: goals, learning_goals: learning, courses, subjects, focus_sessions: focusSessions, user_preferences: preferences, captured_items: captures, application_timeline_events: timeline, career_skills: skills, plan_blocks: plan, attendance, assignments, exams } }
 }
 
