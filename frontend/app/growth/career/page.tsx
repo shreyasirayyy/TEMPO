@@ -23,6 +23,11 @@ export default function GoalsPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const gapCount = state.goals.reduce((sum, g) => sum + g.skills.filter((s) => s.level === 'Gap' || s.level === 'Needs work').length, 0)
 
+  // Inline-edit state (replaces window.prompt/confirm)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+
   async function addGoal() {
     const normalized = title.trim()
     if (!normalized || analyzing) return
@@ -32,6 +37,11 @@ export default function GoalsPage() {
     setTitle('')
     setShowAdd(false)
     setAnalyzing(false)
+  }
+
+  function commitEdit(id: string) {
+    if (editValue.trim()) dispatch({ type: 'UPDATE_GOAL', id, patch: { title: editValue.trim() } })
+    setEditingId(null)
   }
 
   return (
@@ -62,12 +72,38 @@ export default function GoalsPage() {
           {state.goals.map((g) => (
             <div key={g.id} className="rounded-3xl border border-tempo-line bg-white/90 p-5 shadow-card sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-tempo-sageSoft text-tempo-sage"><Target size={18} /></div>
-                  <div className="text-lg font-semibold">{g.title}</div>
+                  {editingId === g.id ? (
+                    <input
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(g.id); if (e.key === 'Escape') setEditingId(null) }}
+                      onBlur={() => commitEdit(g.id)}
+                      className="min-w-0 flex-1 rounded-lg border border-tempo-sage bg-transparent px-1.5 py-0.5 text-lg font-semibold outline-none"
+                    />
+                  ) : (
+                    <div className="min-w-0 flex-1 truncate text-lg font-semibold">{g.title}</div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2"><button aria-label={`Edit ${g.title}`} onClick={() => { const next = window.prompt('Target role', g.title); if (next?.trim()) dispatch({ type: 'UPDATE_GOAL', id: g.id, patch: { title: next.trim() } }) }} className="text-tempo-muted hover:text-tempo-sage"><Pencil size={14} /></button><button aria-label={`Delete ${g.title}`} onClick={() => { if (window.confirm(`Delete ${g.title}?`)) dispatch({ type: 'DELETE_GOAL', id: g.id }) }} className="text-tempo-muted hover:text-tempo-coral"><Trash2 size={14} /></button><span className="rounded-full bg-tempo-sageSoft px-3 py-1 text-xs font-semibold text-tempo-sage">{g.skills.length} skills mapped</span></div>
+                <div className="flex items-center gap-2">
+                  <button aria-label={`Edit ${g.title}`} onClick={() => { setEditingId(g.id); setEditValue(g.title) }} className="text-tempo-muted hover:text-tempo-sage"><Pencil size={14} /></button>
+                  <button aria-label={`Delete ${g.title}`} onClick={() => setConfirmDeleteId(g.id)} className="text-tempo-muted hover:text-tempo-coral"><Trash2 size={14} /></button>
+                  <span className="rounded-full bg-tempo-sageSoft px-3 py-1 text-xs font-semibold text-tempo-sage">{g.skills.length} skills mapped</span>
+                </div>
               </div>
+
+              {confirmDeleteId === g.id && (
+                <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-tempo-cream px-3 py-2 text-xs">
+                  <span>Delete &quot;{g.title}&quot;?</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => { dispatch({ type: 'DELETE_GOAL', id: g.id }); setConfirmDeleteId(null) }} className="rounded-lg bg-tempo-coral px-2.5 py-1 font-semibold text-white">Delete</button>
+                    <button onClick={() => setConfirmDeleteId(null)} className="rounded-lg border border-tempo-line px-2.5 py-1 font-semibold">Cancel</button>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 {g.skills.map((s) => (
                   <div key={s.name} className="rounded-2xl border border-tempo-line bg-white p-3">

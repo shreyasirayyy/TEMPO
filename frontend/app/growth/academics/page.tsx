@@ -20,6 +20,16 @@ export default function AcademicsPage() {
   const [error, setError] = useState('')
   const [assignmentTitle, setAssignmentTitle] = useState('')
   const [examTitle, setExamTitle] = useState('')
+
+  // Inline-edit state (replaces window.prompt/confirm, which don't work in sandboxed previews)
+  const [editingCourseId, setEditingCourseId] = useState<string | null>(null)
+  const [editCourseName, setEditCourseName] = useState('')
+  const [confirmDeleteCourseId, setConfirmDeleteCourseId] = useState<string | null>(null)
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null)
+  const [editAssignmentTitle, setEditAssignmentTitle] = useState('')
+  const [editingExamId, setEditingExamId] = useState<string | null>(null)
+  const [editExamTitle, setEditExamTitle] = useState('')
+
   function addCourse() {
     const values = [Number(total), Number(held), Number(attended), Number(target)]
     if (!name.trim() || values.some((value) => !Number.isFinite(value) || value < 0) || Number(held) > Number(total) || Number(attended) > Number(held) || Number(target) > 100) return setError('Enter a name and valid attendance values: attended ≤ held ≤ total.')
@@ -31,6 +41,22 @@ export default function AcademicsPage() {
   function markAttendance(courseId: string, attendedToday: boolean) {
     const classDate = new Date().toISOString().slice(0, 10)
     dispatch({ type: 'SET_ATTENDANCE_RECORD', record: { id: `${courseId}_${classDate}`, courseId, classDate, attended: attendedToday } })
+  }
+
+  function commitCourseEdit(id: string) {
+    if (editCourseName.trim()) {
+      dispatch({ type: 'UPDATE_COURSE', id, patch: { name: editCourseName.trim() } })
+      dispatch({ type: 'UPDATE_SUBJECT', id, patch: { name: editCourseName.trim() } })
+    }
+    setEditingCourseId(null)
+  }
+  function commitAssignmentEdit(id: string) {
+    if (editAssignmentTitle.trim()) dispatch({ type: 'UPDATE_ASSIGNMENT', id, patch: { title: editAssignmentTitle.trim() } })
+    setEditingAssignmentId(null)
+  }
+  function commitExamEdit(id: string) {
+    if (editExamTitle.trim()) dispatch({ type: 'UPDATE_EXAM', id, patch: { title: editExamTitle.trim() } })
+    setEditingExamId(null)
   }
 
   return (
@@ -55,8 +81,19 @@ export default function AcademicsPage() {
             return (
               <div key={c.id} className="rounded-3xl border border-tempo-line bg-white/90 p-5 shadow-card">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-lg font-semibold">{c.name}</div>
+                  <div className="min-w-0 flex-1">
+                    {editingCourseId === c.id ? (
+                      <input
+                        autoFocus
+                        value={editCourseName}
+                        onChange={(e) => setEditCourseName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') commitCourseEdit(c.id); if (e.key === 'Escape') setEditingCourseId(null) }}
+                        onBlur={() => commitCourseEdit(c.id)}
+                        className="w-full truncate rounded-lg border border-tempo-sage bg-transparent px-1.5 py-0.5 text-lg font-semibold outline-none"
+                      />
+                    ) : (
+                      <div className="truncate text-lg font-semibold">{c.name}</div>
+                    )}
                     <div className="text-xs text-tempo-muted">Target {c.target}% · {classesLeft} classes left this term</div>
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${safe ? 'bg-tempo-sageSoft text-tempo-sage' : 'bg-tempo-coralSoft text-tempo-coral'}`}>
@@ -78,9 +115,25 @@ export default function AcademicsPage() {
                     Protect study time for {c.name} in Plan →
                   </Link>
                 )}
+
+                {confirmDeleteCourseId === c.id && (
+                  <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-tempo-cream px-3 py-2 text-xs">
+                    <span>Delete &quot;{c.name}&quot;?</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { dispatch({ type: 'DELETE_COURSE', id: c.id }); dispatch({ type: 'DELETE_SUBJECT', id: c.id }); setConfirmDeleteCourseId(null) }}
+                        className="rounded-lg bg-tempo-coral px-2.5 py-1 font-semibold text-white"
+                      >
+                        Delete
+                      </button>
+                      <button onClick={() => setConfirmDeleteCourseId(null)} className="rounded-lg border border-tempo-line px-2.5 py-1 font-semibold">Cancel</button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-4 flex gap-2">
-                  <button aria-label={`Edit ${c.name}`} onClick={() => { const nextName = window.prompt('Subject name', c.name); if (nextName?.trim()) { dispatch({ type: 'UPDATE_COURSE', id: c.id, patch: { name: nextName.trim() } }); dispatch({ type: 'UPDATE_SUBJECT', id: c.id, patch: { name: nextName.trim() } }) } }} className="rounded-xl border border-tempo-line px-3 py-2 text-xs text-tempo-muted"><Pencil size={13} /></button>
-                  <button aria-label={`Delete ${c.name}`} onClick={() => { if (window.confirm(`Delete ${c.name}?`)) { dispatch({ type: 'DELETE_COURSE', id: c.id }); dispatch({ type: 'DELETE_SUBJECT', id: c.id }) } }} className="rounded-xl border border-tempo-line px-3 py-2 text-xs text-tempo-coral"><Trash2 size={13} /></button>
+                  <button aria-label={`Edit ${c.name}`} onClick={() => { setEditingCourseId(c.id); setEditCourseName(c.name) }} className="rounded-xl border border-tempo-line px-3 py-2 text-xs text-tempo-muted"><Pencil size={13} /></button>
+                  <button aria-label={`Delete ${c.name}`} onClick={() => setConfirmDeleteCourseId(c.id)} className="rounded-xl border border-tempo-line px-3 py-2 text-xs text-tempo-coral"><Trash2 size={13} /></button>
                   <button
                     disabled={classesLeft === 0}
                     onClick={() => markAttendance(c.id, true)}
@@ -100,9 +153,68 @@ export default function AcademicsPage() {
             )
           })}
         </div>
+
         <div className="mt-7 grid gap-4 md:grid-cols-2">
-          <section className="rounded-3xl border border-tempo-line bg-white/90 p-5 shadow-card"><h2 className="font-semibold">Assignments</h2><div className="mt-3 flex gap-2"><input value={assignmentTitle} onChange={(e) => setAssignmentTitle(e.target.value)} placeholder="Assignment title" className="tempo-input" /><button onClick={() => { if (assignmentTitle.trim()) { dispatch({ type: 'ADD_ASSIGNMENT', assignment: { id: makeId('assignment'), title: assignmentTitle.trim(), status: 'open' } }); setAssignmentTitle('') } }} className="rounded-xl bg-tempo-sage px-3 py-2 text-xs font-semibold text-white">Add</button></div><div className="mt-3 space-y-2">{state.assignments.map((item) => <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-tempo-line px-3 py-2 text-sm"><span className={item.status === 'done' ? 'line-through text-tempo-muted' : ''}>{item.title}</span><span className="flex gap-2"><button onClick={() => dispatch({ type: 'UPDATE_ASSIGNMENT', id: item.id, patch: { status: item.status === 'done' ? 'open' : 'done' } })} className="text-xs text-tempo-sage">{item.status === 'done' ? 'Reopen' : 'Done'}</button><button onClick={() => { const next = window.prompt('Assignment title', item.title); if (next?.trim()) dispatch({ type: 'UPDATE_ASSIGNMENT', id: item.id, patch: { title: next.trim() } }) }}><Pencil size={13} /></button><button onClick={() => dispatch({ type: 'DELETE_ASSIGNMENT', id: item.id })} className="text-tempo-coral"><Trash2 size={13} /></button></span></div>)}</div></section>
-          <section className="rounded-3xl border border-tempo-line bg-white/90 p-5 shadow-card"><h2 className="font-semibold">Exams</h2><div className="mt-3 flex gap-2"><input value={examTitle} onChange={(e) => setExamTitle(e.target.value)} placeholder="Exam title" className="tempo-input" /><button onClick={() => { if (examTitle.trim()) { dispatch({ type: 'ADD_EXAM', exam: { id: makeId('exam'), title: examTitle.trim() } }); setExamTitle('') } }} className="rounded-xl bg-tempo-sage px-3 py-2 text-xs font-semibold text-white">Add</button></div><div className="mt-3 space-y-2">{state.exams.map((item) => <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-tempo-line px-3 py-2 text-sm"><span>{item.title}</span><span className="flex gap-2"><button onClick={() => { const next = window.prompt('Exam title', item.title); if (next?.trim()) dispatch({ type: 'UPDATE_EXAM', id: item.id, patch: { title: next.trim() } }) }}><Pencil size={13} /></button><button onClick={() => dispatch({ type: 'DELETE_EXAM', id: item.id })} className="text-tempo-coral"><Trash2 size={13} /></button></span></div>)}</div></section>
+          <section className="rounded-3xl border border-tempo-line bg-white/90 p-5 shadow-card">
+            <h2 className="font-semibold">Assignments</h2>
+            <div className="mt-3 flex gap-2">
+              <input value={assignmentTitle} onChange={(e) => setAssignmentTitle(e.target.value)} placeholder="Assignment title" className="tempo-input" />
+              <button onClick={() => { if (assignmentTitle.trim()) { dispatch({ type: 'ADD_ASSIGNMENT', assignment: { id: makeId('assignment'), title: assignmentTitle.trim(), status: 'open' } }); setAssignmentTitle('') } }} className="rounded-xl bg-tempo-sage px-3 py-2 text-xs font-semibold text-white">Add</button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {state.assignments.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-tempo-line px-3 py-2 text-sm">
+                  {editingAssignmentId === item.id ? (
+                    <input
+                      autoFocus
+                      value={editAssignmentTitle}
+                      onChange={(e) => setEditAssignmentTitle(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitAssignmentEdit(item.id); if (e.key === 'Escape') setEditingAssignmentId(null) }}
+                      onBlur={() => commitAssignmentEdit(item.id)}
+                      className="min-w-0 flex-1 rounded-lg border border-tempo-sage bg-transparent px-1.5 py-0.5 outline-none"
+                    />
+                  ) : (
+                    <span className={item.status === 'done' ? 'line-through text-tempo-muted' : ''}>{item.title}</span>
+                  )}
+                  <span className="flex shrink-0 gap-2">
+                    <button onClick={() => dispatch({ type: 'UPDATE_ASSIGNMENT', id: item.id, patch: { status: item.status === 'done' ? 'open' : 'done' } })} className="text-xs text-tempo-sage">{item.status === 'done' ? 'Reopen' : 'Done'}</button>
+                    <button onClick={() => { setEditingAssignmentId(item.id); setEditAssignmentTitle(item.title) }}><Pencil size={13} /></button>
+                    <button onClick={() => dispatch({ type: 'DELETE_ASSIGNMENT', id: item.id })} className="text-tempo-coral"><Trash2 size={13} /></button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-tempo-line bg-white/90 p-5 shadow-card">
+            <h2 className="font-semibold">Exams</h2>
+            <div className="mt-3 flex gap-2">
+              <input value={examTitle} onChange={(e) => setExamTitle(e.target.value)} placeholder="Exam title" className="tempo-input" />
+              <button onClick={() => { if (examTitle.trim()) { dispatch({ type: 'ADD_EXAM', exam: { id: makeId('exam'), title: examTitle.trim() } }); setExamTitle('') } }} className="rounded-xl bg-tempo-sage px-3 py-2 text-xs font-semibold text-white">Add</button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {state.exams.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-tempo-line px-3 py-2 text-sm">
+                  {editingExamId === item.id ? (
+                    <input
+                      autoFocus
+                      value={editExamTitle}
+                      onChange={(e) => setEditExamTitle(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitExamEdit(item.id); if (e.key === 'Escape') setEditingExamId(null) }}
+                      onBlur={() => commitExamEdit(item.id)}
+                      className="min-w-0 flex-1 rounded-lg border border-tempo-sage bg-transparent px-1.5 py-0.5 outline-none"
+                    />
+                  ) : (
+                    <span>{item.title}</span>
+                  )}
+                  <span className="flex shrink-0 gap-2">
+                    <button onClick={() => { setEditingExamId(item.id); setEditExamTitle(item.title) }}><Pencil size={13} /></button>
+                    <button onClick={() => dispatch({ type: 'DELETE_EXAM', id: item.id })} className="text-tempo-coral"><Trash2 size={13} /></button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       </div>
     </AppShell>
