@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tempo-bg: #f8f4ed;
+  --tempo-panel: #fffdf9;
+  --tempo-ink: #263834;
+  --tempo-line: #e5e2da;
+}
+
+[data-theme='dark'] {
+  --tempo-bg: #18221f;
+  --tempo-panel: #202d29;
+  --tempo-ink: #eef5ef;
+  --tempo-line: #3a4b45;
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+html { overflow-x: hidden; }
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--tempo-bg);
+  color: var(--tempo-ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+[data-theme='dark'] body { color-scheme: dark; }
+[data-theme='dark'] .bg-white, [data-theme='dark'] .bg-white\/90, [data-theme='dark'] .bg-white\/80 { background-color: var(--tempo-panel); }
+[data-theme='dark'] .bg-tempo-cream { background-color: #273630; }
+[data-theme='dark'] input, [data-theme='dark'] textarea, [data-theme='dark'] select { background-color: #202d29; color: var(--tempo-ink); }
+[data-theme='dark'] input::placeholder, [data-theme='dark'] textarea::placeholder { color: #a9bbb2; }
+[data-theme='dark'] .text-tempo-ink { color: var(--tempo-ink); }
+[data-theme='dark'] .text-tempo-muted { color: #b5c5bd; }
+[data-theme='dark'] .border-tempo-line { border-color: var(--tempo-line); }
+[data-theme='dark'] .tempo-grid { background-image: linear-gradient(rgba(201, 229, 212, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(201, 229, 212, 0.045) 1px, transparent 1px); }
+img { max-width: 100%; }
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+::selection { background: #cde3d8; }
+
+.tempo-grid {
+  background-image:
+    linear-gradient(rgba(67, 94, 86, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(67, 94, 86, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.serif { font-family: Georgia, "Times New Roman", serif; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+@media (max-width: 767px) {
+  body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+}
+
+/* Splash — calm, minimal fades. No looping/attention animation. */
+@keyframes tempo-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes tempo-breathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.tempo-splash-mascot { animation: tempo-fade-up 0.6s ease-out both, tempo-breathe 3.2s ease-in-out 0.6s infinite; }
+.tempo-splash-logo { animation: tempo-fade-up 0.6s ease-out 0.15s both; }
+.tempo-splash-tagline { animation: tempo-fade-up 0.6s ease-out 0.3s both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tempo-splash-mascot, .tempo-splash-logo, .tempo-splash-tagline { animation: none; }
+}
+
+.safe-area-top { padding-top: max(2rem, env(safe-area-inset-top)); }
+.safe-area-bottom { padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+
+.tempo-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--tempo-line, #e5e2da);
+  background: #fff;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+}
+.tempo-input:focus { border-color: #2f7d69; }
