@@ -3,10 +3,11 @@ import { priorityFromApplication, priorityFromTask } from './ai/priorityEngine'
 import { todayKey } from './date'
 import { computeUsableMinutesToday } from './planTime'
 
-// This is the server-side twin of the frontend's old lib/services/tempoData.ts.
-// It used to run in the browser talking to Supabase directly; the row <->
-// domain-model mapping is unchanged, it just now runs here and is reached
-// over HTTP instead of being called straight from a React component.
+function detectDependencies(title: string, allTitles: string[]): string[] {
+  const t = title.toLowerCase()
+  if (/application|apply/.test(t)) return allTitles.filter((o) => o !== title && /resume|cv|portfolio/i.test(o))
+  return []
+}
 
 type DbRow = Record<string, any>
 
@@ -42,7 +43,8 @@ export async function fetchTempoData(client: SupabaseClient, userId: string) {
   const assignments = assignmentRows.map((row) => ({ id: row.id, title: row.title, courseId: row.course_id ?? undefined, dueAt: row.due_at ? Date.parse(row.due_at) : null, status: row.status === 'done' ? ('done' as const) : ('open' as const) }))
   const exams = examRows.map((row) => ({ id: row.id, title: row.title, courseId: row.course_id ?? undefined, startsAt: row.starts_at ? Date.parse(row.starts_at) : null }))
   const availableMinutes = computeUsableMinutesToday(plan.filter((block) => block.day === todayKey()) as any, new Date(), { start: preferences.planning_window_start?.slice(0, 5) ?? '08:00', end: preferences.planning_window_end?.slice(0, 5) ?? '23:00' })
-  const priorities = taskRows.map((row) => priorityFromTask({ id: row.id, title: row.title, category: row.category ?? 'Academic', due: row.due ?? 'Unknown deadline', dueAt: row.due_at ? Date.parse(row.due_at) : null, effort: row.effort ?? '', availableMinutes, planningMode: profile.planning_mode ?? null } as any))
+  const taskTitles = taskRows.map((row) => row.title)
+  const priorities = taskRows.map((row) => priorityFromTask({ id: row.id, title: row.title, category: row.category ?? 'Academic', due: row.due ?? 'Unknown deadline', dueAt: row.due_at ? Date.parse(row.due_at) : null, effort: row.effort ?? '', availableMinutes, planningMode: profile.planning_mode ?? null, dependencies: detectDependencies(row.title, taskTitles) } as any))
   applications.forEach((application) => priorities.push(priorityFromApplication({ app: application as any, availableMinutes, planningMode: profile.planning_mode ?? null })))
   const completedFocus = focusRows.filter((row) => row.status === 'completed')
   const focusSessions = completedFocus.map((row) => ({ id: row.id, minutes: Number(row.minutes) || 0, title: row.title ?? undefined, sourceType: row.source_type, sourceId: row.source_id ?? undefined, completedAt: row.completed_at ?? row.created_at }))

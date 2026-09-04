@@ -128,6 +128,7 @@ type Action =
   | { type: 'ACCEPT_FIX_SUGGESTION' }
   | { type: 'SET_FOCUS_CONTEXT'; context: FocusContext | null }
   | { type: 'COMPLETE_FOCUS_SESSION'; minutes: number; context?: FocusContext | null }
+  | { type: 'SET_USER_NAME'; name: string }
   | { type: 'ADD_FOCUS_MINUTES'; minutes: number }
   | { type: 'UPDATE_LEARNING_PROGRESS'; id: string; progress: number }
   | { type: 'ADD_LEARNING_TRACK'; track: LearningTrack }
@@ -511,6 +512,8 @@ function reducer(state: TempoState, action: Action): TempoState {
     case 'COMPLETE_FOCUS_SESSION':
       return applyFocusCompletion(state, action.minutes, action.context ?? state.focusContext)
 
+    case 'SET_USER_NAME': return { ...state, userName: action.name.trim() || state.userName }
+
     case 'ADD_FOCUS_MINUTES':
       return applyFocusCompletion(state, action.minutes, state.focusContext)
 
@@ -631,7 +634,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!state.hydrated) return
     try {
-      const { hydrated: _hydrated, ...persisted } = state
+      const { hydrated: _hydrated, dataError: _dataError, ...persisted } = state
       localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
     } catch {
       // Local-only prototype: storage can be unavailable in private mode.
@@ -639,17 +642,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [state])
 
   useEffect(() => {
-    if (!state.hydrated || !state.auth.isAuthenticated || !remoteUserIdRef.current || state.dataError) return
-    if (!remoteStateRef.current) { remoteStateRef.current = state; return }
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+   if (!state.hydrated || !state.auth.isAuthenticated || !remoteUserIdRef.current) return
+   if (!remoteStateRef.current) { remoteStateRef.current = state; return }
+   if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     const userId = remoteUserIdRef.current
-    const previous = remoteStateRef.current
-    saveTimerRef.current = setTimeout(() => {
-      saveTempoData(userId, state, previous).then(() => { remoteStateRef.current = state }).catch((error) => dispatch({ type: 'SET_DATA_ERROR', message: error instanceof Error ? error.message : 'Tempo data could not be saved.' }))
+   const previous = remoteStateRef.current
+   saveTimerRef.current = setTimeout(() => {
+    saveTempoData(userId, state, previous)
+      .then(() => { remoteStateRef.current = state; dispatch({ type: 'SET_DATA_ERROR', message: null }) })
+      .catch((error) => dispatch({ type: 'SET_DATA_ERROR', message: error instanceof Error ? error.message : 'Tempo data could not be saved.' }))
     }, 350)
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
   }, [state])
-
+  
   useEffect(() => {
     if (typeof document !== 'undefined') document.documentElement.dataset.theme = state.theme
   }, [state.theme])

@@ -16,6 +16,8 @@ const MODES: { key: 'Gentle' | 'Pressure'; desc: string }[] = [
 export default function ProfilePage() {
   const { state, dispatch } = useTempo()
   const [feedback, setFeedback] = useState('')
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState(state.userName)
   const [confirmClear, setConfirmClear] = useState(false)
   const [authError, setAuthError] = useState('')
 
@@ -31,10 +33,17 @@ export default function ProfilePage() {
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="flex items-center gap-4">
           <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-[#dbc9bc] text-2xl font-semibold">{state.userName[0]}</div>
-          <div className="min-w-0">
-            <h1 className="serif truncate text-3xl sm:text-4xl">{state.userName}</h1>
-            <p className="text-sm text-tempo-muted">{state.planningMode ?? 'Not set'} mode · {state.focusStreak} day focus streak</p>
-          </div>
+        <div className="min-w-0">
+            {editingName ? (
+            <div className="flex items-center gap-2">
+                <input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} className="serif w-full rounded-lg border border-tempo-line px-2 py-1 text-2xl sm:text-3xl" autoFocus />
+               <button onClick={() => { dispatch({ type: 'SET_USER_NAME', name: nameDraft }); setEditingName(false) }} className="text-xs font-semibold text-tempo-sage">Save</button>
+           </div>
+          ) : (
+            <h1 onClick={() => { setNameDraft(state.userName); setEditingName(true) }} className="serif truncate text-3xl sm:text-4xl cursor-pointer" title="Tap to edit name">{state.userName}</h1>
+         )}
+         <p className="text-sm text-tempo-muted">{state.planningMode ?? 'Not set'} mode · {state.focusStreak} day focus streak</p>
+         </div>
         </div>
 
         <Link href="/insights" className="mt-6 flex items-center justify-between gap-3 rounded-3xl border border-tempo-line bg-white/90 p-5 shadow-card transition hover:-translate-y-0.5">
