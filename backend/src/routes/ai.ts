@@ -39,9 +39,58 @@ Application:
 
 Rules:
 - Never invent a company, role, or date that is not supported by the text. Leave it '' / null and list it in uncertainFields instead.
+  Guessing a plausible-sounding deadline, company, or effort when the text does not state one is a hard failure -- '' / null
+  plus uncertainFields is always correct when you are not sure, even if that makes the result look incomplete.
 - Only set status to "Applied" if the text clearly indicates submission already happened.
-- If the text describes more than one commitment, extract only the FIRST/primary one -- the app handles multi-item text by
-  calling you once per detected item.
+- The current date/time is provided in the user message so you can resolve relative dates like "tonight" or "Friday".`
+
+// Same per-item task/application shapes as CAPTURE_SYSTEM_PROMPT, but the
+// response is a JSON array so one paste containing several commitments
+// ("DBMS report due tonight... also OS assignment due tomorrow...") comes
+// back as multiple items in one call, instead of the app needing to guess
+// how to split the text itself.
+const MULTI_CAPTURE_SYSTEM_PROMPT = `You are the Smart Capture extraction engine for Tempo, a student planning app.
+Given a piece of unstructured text (pasted message, screenshot transcript, or voice-note transcript), find EVERY distinct
+commitment mentioned -- the text may describe one thing or several separate tasks/applications in the same paste (e.g. an
+assignment AND an exam AND an interview prep session mentioned in the same message). Extract each one as its own item.
+
+Respond with ONLY a single JSON object of the shape {"items": [...]}, no prose. Each entry in "items" must match exactly
+one of these shapes:
+
+Task:
+{
+  "kind": "task",
+  "title": "short task title",
+  "category": "Academic" | "Career" | "Learning" | "Personal",
+  "due": "human readable date label, e.g. 'Tonight 11:59 PM' or '' if unknown",
+  "dueAtISO": "ISO 8601 datetime string, or null if unknown",
+  "effort": "estimate like '2h' or '45m', or '' if you cannot reasonably infer it",
+  "uncertainFields": ["array of field names you were NOT confident about, from: due, effort"]
+}
+
+Application:
+{
+  "kind": "application",
+  "company": "company name, or '' if unknown",
+  "role": "role/position, or '' if unknown",
+  "status": "Needs Review" | "Form Started" | "In Progress" | "Applied" | "Interview" | "Offer" | "Rejected",
+  "deadline": "human readable date label, or '' if unknown",
+  "deadlineAtISO": "ISO 8601 datetime string, or null if unknown",
+  "appliedOn": "human readable date label if the text says when they applied, else ''",
+  "link": "URL mentioned in the text, or ''",
+  "followUpDate": "human readable date label if a follow-up is implied, else ''",
+  "uncertainFields": ["array of field names you were NOT confident about, from: company, role, deadline, status, appliedOn, link"]
+}
+
+Rules:
+- Never invent a company, role, deadline, or effort that is not clearly supported by the text. If it's not stated, use
+  '' / null and add the field name to that item's uncertainFields -- do not fill in a plausible-sounding guess.
+- Only set status to "Applied" if the text clearly indicates submission already happened.
+- Do not split one commitment into two items (e.g. don't create a separate item for "submit" and "prepare" if the text
+  describes a single assignment). Only split when the text genuinely names distinct commitments.
+- If the text describes only one commitment, "items" should contain exactly one entry -- don't invent extra items to
+  pad the array.
+- If you truly find nothing extractable, return {"items": []}.
 - The current date/time is provided in the user message so you can resolve relative dates like "tonight" or "Friday".`
 
 function todayContext(): string {
@@ -225,6 +274,41 @@ aiRouter.post('/extract-capture-image', async (req, res) => {
   }
 })
 
+// Shared normalizer for one raw LLM item -> the app's Extracted shape.
+// Used by both the single-item image route (unchanged) and the new
+// multi-item text route below, so validation/fallback rules stay identical.
+function normalizeExtracted(obj: Record<string, unknown>, fallbackTitle: string): Record<string, unknown> | null {
+  if (obj?.kind === 'task') {
+    return {
+      kind: 'task',
+      title: String(obj.title ?? '').slice(0, 200) || fallbackTitle,
+      category: ['Academic', 'Career', 'Learning', 'Personal'].includes(String(obj.category)) ? obj.category : 'Academic',
+      due: String(obj.due ?? ''),
+      dueAt: toEpoch(obj.dueAtISO),
+      effort: String(obj.effort ?? ''),
+      uncertainFields: Array.isArray(obj.uncertainFields) ? obj.uncertainFields : [],
+    }
+  }
+  if (obj?.kind === 'application') {
+    const validStatuses = ['Needs Review', 'Form Started', 'In Progress', 'Applied', 'Interview', 'Offer', 'Rejected']
+    return {
+      kind: 'application',
+      company: String(obj.company ?? ''),
+      role: String(obj.role ?? ''),
+      status: validStatuses.includes(String(obj.status)) ? obj.status : 'Needs Review',
+      deadline: String(obj.deadline ?? ''),
+      deadlineAt: toEpoch(obj.deadlineAtISO),
+      appliedOn: String(obj.appliedOn ?? ''),
+      link: String(obj.link ?? ''),
+      questions: [],
+      submittedItems: [],
+      followUpDate: String(obj.followUpDate ?? ''),
+      uncertainFields: Array.isArray(obj.uncertainFields) ? obj.uncertainFields : [],
+    }
+  }
+  return null
+}
+
 aiRouter.post('/extract-capture', async (req, res) => {
   const { rawText } = req.body ?? {}
   if (typeof rawText !== 'string' || !rawText.trim()) {
@@ -235,46 +319,19 @@ aiRouter.post('/extract-capture', async (req, res) => {
   }
 
   try {
-    const raw = await groqExtractJSON(CAPTURE_SYSTEM_PROMPT, `${todayContext()}\n\nText to extract from:\n"""${rawText.trim()}"""`)
+    const raw = await groqExtractJSON(MULTI_CAPTURE_SYSTEM_PROMPT, `${todayContext()}\n\nText to extract from:\n"""${rawText.trim()}"""`)
     const obj = raw as Record<string, unknown>
+    const rawItems = Array.isArray(obj?.items) ? obj.items : null
 
-    if (obj?.kind === 'task') {
-      return res.json({
-        source: 'llm',
-        extracted: {
-          kind: 'task',
-          title: String(obj.title ?? '').slice(0, 200) || rawText.trim().slice(0, 80),
-          category: ['Academic', 'Career', 'Learning', 'Personal'].includes(String(obj.category)) ? obj.category : 'Academic',
-          due: String(obj.due ?? ''),
-          dueAt: toEpoch(obj.dueAtISO),
-          effort: String(obj.effort ?? ''),
-          uncertainFields: Array.isArray(obj.uncertainFields) ? obj.uncertainFields : [],
-        },
-      })
-    }
+    if (!rawItems) return res.status(502).json({ error: 'Groq returned an unrecognized extraction shape.' })
 
-    if (obj?.kind === 'application') {
-      const validStatuses = ['Needs Review', 'Form Started', 'In Progress', 'Applied', 'Interview', 'Offer', 'Rejected']
-      return res.json({
-        source: 'llm',
-        extracted: {
-          kind: 'application',
-          company: String(obj.company ?? ''),
-          role: String(obj.role ?? ''),
-          status: validStatuses.includes(String(obj.status)) ? obj.status : 'Needs Review',
-          deadline: String(obj.deadline ?? ''),
-          deadlineAt: toEpoch(obj.deadlineAtISO),
-          appliedOn: String(obj.appliedOn ?? ''),
-          link: String(obj.link ?? ''),
-          questions: [],
-          submittedItems: [],
-          followUpDate: String(obj.followUpDate ?? ''),
-          uncertainFields: Array.isArray(obj.uncertainFields) ? obj.uncertainFields : [],
-        },
-      })
-    }
+    const items = rawItems
+      .map((item) => normalizeExtracted(item as Record<string, unknown>, rawText.trim().slice(0, 80)))
+      .filter((item): item is Record<string, unknown> => item !== null)
 
-    return res.status(502).json({ error: 'Groq returned an unrecognized extraction shape.' })
+    if (items.length === 0) return res.status(502).json({ error: 'Groq did not find anything extractable in this text.' })
+
+    return res.json({ source: 'llm', items })
   } catch (error) {
     const message = error instanceof GroqError ? error.message : 'Extraction failed.'
     res.status(502).json({ error: message })

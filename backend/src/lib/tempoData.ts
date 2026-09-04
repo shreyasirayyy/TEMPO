@@ -85,7 +85,13 @@ async function syncRows(client: SupabaseClient, table: string, userId: string, c
 
 function rowsForState(userId: string, state: any) {
   const tasks = state.priorities.filter((item: any) => item.sourceType === 'capture').map((item: any) => ({ id: item.id, user_id: userId, title: item.title, category: item.category, due: item.due, due_at: item.dueAt ? new Date(item.dueAt).toISOString() : null, effort: item.time, done: item.done, priority: item.priority }))
-  const plan = state.plan.map((block: any) => ({ id: block.id, user_id: userId, task_id : null, title: block.title, day: block.day, start_time: block.time, duration_minutes: block.durationMinutes ?? 0, kind: block.kind, priority: block.priority, done: block.done, fixed: block.fixed, flexibility: block.flexibility, can_move: block.canMove, source_type: block.sourceType ?? null, source_id: block.sourceId ?? null, notes: block.notes ?? null }))
+  // NOTE: block.sourceId for capture-sourced blocks is a client-generated id
+  // (see makeId('task') in store.tsx) that never becomes a row in the
+  // `tasks` table -- this app doesn't maintain a real tasks table. Writing
+  // it as task_id trips the plan_blocks_task_id_fkey constraint. source_type
+  // / source_id below already carry that link for the frontend's own
+  // matching logic, so task_id just stays null until a real tasks table exists.
+  const plan = state.plan.map((block: any) => ({ id: block.id, user_id: userId, task_id: null, title: block.title, day: block.day, start_time: block.time, duration_minutes: block.durationMinutes ?? 0, kind: block.kind, priority: block.priority, done: block.done, fixed: block.fixed, flexibility: block.flexibility, can_move: block.canMove, source_type: block.sourceType ?? null, source_id: block.sourceId ?? null, notes: block.notes ?? null }))
   const captures = state.captures.map((capture: any) => ({ id: capture.id, user_id: userId, capture_type: capture.type, raw_text: capture.rawText, proof: capture.proof ?? null, status: capture.status, extracted: capture.extracted ?? null }))
   const applications = state.applications.map((app: any) => ({ id: app.id, user_id: userId, company: app.company, role: app.role, status: app.status, deadline: app.deadline, deadline_at: app.deadlineAt ? new Date(app.deadlineAt).toISOString() : null, applied_on: app.appliedOn ?? null, link: app.link ?? null, questions: app.questions, submitted_items: app.submittedItems, proof: app.proof ?? null, notes: app.notes ?? null, follow_up_date: app.followUpDate ?? null }))
   const timeline = state.applications.flatMap((app: any) => app.timeline.map((event: any) => ({ id: event.id, user_id: userId, application_id: app.id, label: event.label, event_date: event.date, note: event.note ?? null })))

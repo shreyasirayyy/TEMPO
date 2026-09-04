@@ -1,8 +1,6 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
 
 :root {
   --tempo-bg: #f8f4ed;
@@ -20,6 +18,11 @@
 
 * { box-sizing: border-box; }
 html, body { min-height: 100%; }
+/* scrollbar-gutter keeps the vertical scrollbar's space reserved at all
+   times, so toggling `body.style.overflow = 'hidden'` (Sheet's scroll lock
+   -- see components/ui/sheet.tsx) never causes the page width to jump when
+   a modal like "Why" opens/closes. Without this, losing/regaining the
+   scrollbar shifted the whole layout a few px, which read as a "flash". */
 html { overflow-x: hidden; scrollbar-gutter: stable; }
 body {
   margin: 0;

@@ -61,17 +61,31 @@ function taskCategory(text: string): PriorityItem['category'] {
   return 'Academic'
 }
 
+// Splits a pasted blob of text into individual task-like segments so a
+// single paste containing several commitments ("DBMS report due tonight\nOS
+// assignment due tomorrow") produces multiple capture items instead of one
+// giant title. Only used for the 'text' capture type -- voice/image/file
+// captures still go through as a single item.
+//
+// Heuristic, not an LLM call: split on newlines and on explicit list
+// markers/numbering, then drop fragments too short to be their own task
+// (stray punctuation, a lone "and", etc). If splitting doesn't actually
+// produce more than one usable segment, the caller falls back to treating
+// the whole paste as one item -- this never makes single-item pastes worse.
 export function splitCaptureSegments(rawText: string): string[] {
   const text = rawText.trim()
   if (!text) return []
 
   const lines = text
     .split(/\r?\n+/)
-    .flatMap((line) => line.split(/(?<=[.!?])\s+(?=[A-Z])/))
-    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
-    .filter((line) => line.length >= 6)
-    .filter((line) => /[a-zA-Z]{3,}/.test(line))
+    .flatMap((line) => line.split(/(?<=[.!?])\s+(?=[A-Z])/)) // also split sentences within one line
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim()) // strip "- ", "1.", "2)" list markers
+    .filter((line) => line.length >= 6) // drop stray fragments
+    .filter((line) => /[a-zA-Z]{3,}/.test(line)) // must contain a real word
 
+  // Merge lines back together isn't needed -- each surviving line is a
+  // candidate segment. If we only found one (or the split produced nothing
+  // usable), signal "not multi" by returning the original single block.
   return lines.length > 1 ? lines : [text]
 }
 

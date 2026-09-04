@@ -8,7 +8,7 @@ import { Mascot } from '@/components/mascot'
 import { useTempo } from '@/lib/store'
 import { makeId } from '@/lib/id'
 import { detectDate, parseCapture, splitCaptureSegments } from '@/lib/ai/captureParser'
-import { tryAiExtract } from '@/lib/ai/aiExtract'
+import { tryAiExtract, tryAiExtractAll } from '@/lib/ai/aiExtract'
 import { tryAiExtractFromImage } from '@/lib/ai/imageExtract'
 import { findDuplicateApplication } from '@/lib/duplicates'
 import { transcribeAudio } from '@/lib/ai/transcriptionAdapter'
@@ -37,10 +37,46 @@ export default function CapturePage() {
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const [voiceError, setVoiceError] = useState('')
-  // Queue of remaining segments when a single paste contained multiple
-  // tasks -- startProcessing() handles one at a time, and confirm()/skip()
-  // advance to the next segment instead of clearing back to the drop zone.
-  const [queue, setQueue] = useState<string[]>([])
+  // Queue of remaining already-extracted items when a single paste contained
+  // multiple commitments -- confirm()/skip() pull the next one straight into
+  // review instead of re-running extraction or clearing back to the drop zone.
+  const [queue, setQueue] = useState<Extracted[]>([])
+
+  // Shows one already-extracted item in the review panel, registering it as
+  // its own capture entry (so Inbox/history has one row per real commitment,
+  // not one row for the whole multi-task paste).
+  function showExtracted(rawText: string, extracted: Extracted) {
+    const item: CaptureItem = { id: makeId('cap'), type: 'text', rawText, createdAt: Date.now(), status: 'pending', extracted }
+    dispatch({ type: 'ADD_CAPTURE', item })
+    dispatch({ type: 'UPDATE_CAPTURE_EXTRACTION', id: item.id, extracted, status: 'pending' })
+    setCapture(item)
+    setDraft(extracted)
+  }
+
+  function extractedRawText(extracted: Extracted): string {
+    return extracted.kind === 'task' ? extracted.title : `${extracted.company || 'Application'} — ${extracted.role || 'role'}`
+  }
+
+  // Text-paste entry point: sends the WHOLE pasted block to the LLM once,
+  // which now finds every distinct commitment in it (see backend's
+  // MULTI_CAPTURE_SYSTEM_PROMPT). Falls back to the local regex splitter +
+  // per-segment parseCapture only if the LLM is unavailable/fails, so a
+  // multi-task paste still degrades gracefully with no AI configured.
+  async function beginTextCapture(rawText: string) {
+    const placeholder: CaptureItem = { id: makeId('cap'), type: 'text', rawText, createdAt: Date.now(), status: 'processing' }
+    setCapture(placeholder)
+    setDraft(null)
+    dispatch({ type: 'ADD_CAPTURE', item: placeholder })
+
+    const llmItems = await tryAiExtractAll(rawText)
+    const items = llmItems && llmItems.length > 0 ? llmItems : splitCaptureSegments(rawText).map((segment) => parseCapture('text', segment))
+
+    const [first, ...rest] = items
+    setQueue(rest)
+    dispatch({ type: 'UPDATE_CAPTURE_EXTRACTION', id: placeholder.id, extracted: first, status: 'pending' })
+    setCapture({ ...placeholder, status: 'pending', extracted: first })
+    setDraft(first)
+  }
 
   function startProcessing(type: CaptureType, rawText: string, proof?: string) {
     const item: CaptureItem = { id: makeId('cap'), type, rawText, createdAt: Date.now(), status: 'processing', proof }
@@ -125,7 +161,7 @@ export default function CapturePage() {
   function advanceQueue() {
     setQueue((current) => {
       const [next, ...rest] = current
-      if (next) startProcessing('text', next)
+      if (next) showExtracted(extractedRawText(next), next)
       else reset()
       return rest
     })
@@ -214,12 +250,7 @@ export default function CapturePage() {
                     />
                     <button
                       disabled={!textValue.trim()}
-                      onClick={() => {
-                        const segments = splitCaptureSegments(textValue)
-                        const [first, ...rest] = segments
-                        setQueue(rest)
-                        startProcessing('text', first)
-                      }}
+                      onClick={() => void beginTextCapture(textValue)}
                       className="mt-3 w-full rounded-xl bg-tempo-sage px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
                     >
                       Process with Tempo
